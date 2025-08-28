@@ -18,7 +18,7 @@ This workflow automates the process of reviewing and analyzing SEO metadata for 
 
 - n8n instance (self-hosted or cloud)
 - Anthropic API key for AI-powered analysis
-- Firecrawl API key for enhanced web scraping
+- Firecrawl API key for enhanced web scraping to markdown format
 - SMTP email configuration for notifications
 - Required n8n nodes (see workflow dependencies below)
 
@@ -47,78 +47,60 @@ This workflow automates the process of reviewing and analyzing SEO metadata for 
 
 This workflow uses n8n's credential system for secure API key management. You'll need to set up the following credentials:
 
+**Note**: All sensitive data is stored securely in n8n credentials. Never hardcode API keys in workflow nodes.
+
 #### 1. Anthropic API Credentials
 For AI-powered SEO analysis and recommendations:
 
 **Setup**:
-- Sign up at [Anthropic Console](https://console.anthropic.com/)
+- Sign up or sign in at [Anthropic Console](https://console.anthropic.com/)
 - Create an API key
 - In n8n: Settings → Credentials → Add Credential
-- Select "HTTP Header Auth"
+- Select "Anthropic"
 - **Credential Name**: "Anthropic API"
-- **Header Name**: "x-api-key"
-- **Header Value**: Your Anthropic API key
+- **API Key**: "x-api-key"
+- **Base URL**: https://api.anthropic.com (note: this should be pre-populated)
 
 #### 2. Firecrawl API Credentials
-For enhanced web scraping and content extraction:
+For enhanced web scraping and content extraction to markdown:
 
 **Setup**:
 - Sign up at [Firecrawl](https://firecrawl.dev/)
 - Get your API key from the dashboard
 - In n8n: Settings → Credentials → Add Credential
-- Select "HTTP Header Auth"
+- Select "Firecrawl API"
 - **Credential Name**: "Firecrawl API"
-- **Header Name**: "Authorization"
-- **Header Value**: "Bearer YOUR_FIRECRAWL_API_KEY"
+- **Base URL**: "https://api.firecrawl.dev/v1"
+- **API Key**: "Bearer YOUR_FIRECRAWL_API_KEY" (note: be sure to include the "bearer " before your api key)
 
 #### 3. SMTP Email Credentials
 For sending analysis reports via email:
 
 **Setup**:
-- Configure your email provider (Gmail, Outlook, SendGrid, etc.)
+- Configure your email provider (Gmail, Outlook, etc.)
 - In n8n: Settings → Credentials → Add Credential
 - Select "SMTP"
 - **Credential Name**: "SEO Email SMTP"
 - **Configure settings** based on your provider (see detailed guide in docs/CONFIGURATION.md)
 
 ### Input Parameters
-- **URLs**: Target websites to analyze
-- **Analysis Depth**: Level of metadata analysis
-- **Output Format**: JSON, CSV, or custom format
-- **Email Recipients**: Notification email addresses
-- **Analysis Options**: Custom SEO rules and preferences
-
-### Credential Configuration Summary
-
-| Service | Credential Type | Header/Field | Value Format |
-|---------|----------------|--------------|--------------|
-| Anthropic | HTTP Header Auth | x-api-key | `sk-ant-your-key` |
-| Firecrawl | HTTP Header Auth | Authorization | `Bearer fc-your-key` |
-| SMTP Email | SMTP | N/A | Host, port, user, password |
-
-**Note**: All sensitive data is stored securely in n8n credentials. Never hardcode API keys in workflow nodes.
+- **URL**: Target website to analyze
+- **Email From/To**: Notification email addresses
 
 ## Usage
 
 ### Manual Execution
 1. Open the workflow in n8n
 2. Ensure all credentials are configured
-3. Provide target website URL
-4. Configure analysis parameters
+3. Provide target website URL in the Init Site node
+4. Enter the Email From/Email To in the Send Email node
 5. Click "Execute Workflow"
 6. Check email for detailed analysis report
 
-### Automated Execution
-- Configure triggers (webhook, cron, etc.)
-- Set up input sources (webhooks, databases, files)
-- Monitor execution logs for results
-- Automated email delivery for each analysis
 
 ## Workflow Structure
 
-```
 Trigger → URL Processing → Firecrawl Scraping → Anthropic Analysis → Email Report → Output
-```
 
 ### Key Nodes
 - **Firecrawl**: Enhanced web content extraction (uses Firecrawl API credential)
@@ -126,67 +108,45 @@ Trigger → URL Processing → Firecrawl Scraping → Anthropic Analysis → Ema
 - **Email**: Send formatted analysis reports (uses SMTP credential)
 - **Set**: Structure and format output data
 - **Code**: Custom logic and data processing
-- **Webhook**: Receive trigger events
 
 ## Output Format
 
-The workflow produces comprehensive analysis reports:
+The workflow produces comprehensive analysis reports. Example email below:
 
-```json
-{
-  "url": "https://example.com",
-  "metadata": {
-    "title": "Page Title",
-    "description": "Meta description",
-    "keywords": ["keyword1", "keyword2"],
-    "openGraph": {
-      "title": "OG Title",
-      "description": "OG Description",
-      "image": "og-image.jpg"
-    },
-    "twitterCard": {
-      "card": "summary_large_image",
-      "title": "Twitter Title"
-    }
-  },
-  "analysis": {
-    "titleAnalysis": {
-      "length": 65,
-      "recommendations": ["Consider shortening title"],
-      "score": 85
-    },
-    "descriptionAnalysis": {
-      "length": 155,
-      "recommendations": [],
-      "score": 95
-    },
-    "overallScore": 88,
-    "aiRecommendations": [
-      "Add more descriptive keywords to title",
-      "Include call-to-action in meta description"
-    ]
-  },
-  "timestamp": "2025-08-28T08:13:20Z"
-}
-```
+Metadata Report
+Page: TARGET URL
+Score: 55/100
 
-## Customization
+Key Findings
+MEDIUM — Title length (74 chars) exceeds recommended range, may truncate in search results
+HIGH — Meta description (243 chars) significantly exceeds limits and contains redundant content
+HIGH — Complete absence of Open Graph metadata impacts social media sharing
+MEDIUM — Missing language declarations affect accessibility and search engine understanding
 
-### Adding New Analysis Rules
-1. Open the Anthropic Claude node
-2. Modify the analysis prompt
-3. Add custom SEO criteria
-4. Update output formatting accordingly
+Priority Fixes
+Priority	Action	Why it matters
+P0	Trim meta description to 120-155 characters by removing redundant phrases and improving flow	Current length will cause truncation and poor user experience
+P0	Add complete Open Graph tags (og:title, og:description, og:image, og:locale)	Essential for proper social media sharing and engagement
+P1	Add html_lang='en' attribute to html element	Improves accessibility and search engine language detection
+P1	Optimize title length to 50-60 characters while maintaining key messaging	Reduces risk of truncation in search results
 
-### Modifying Email Templates
-1. Edit the Email node configuration
-2. Customize HTML email template
-3. Adjust report formatting and styling
+Recommended Title
+Perfect Winery Venues for Unforgettable Events | (Insert Company Name)
 
-### Adding New Data Sources
-1. Configure additional Firecrawl options
-2. Add new metadata extraction rules
-3. Update analysis logic for new data points
+Recommended Meta Description
+Discover premier winery venues for weddings, corporate events, and celebrations. Search by region, compare layouts, and connect directly with breathtaking wine country spaces for your next unforgettable event.
+
+Open Graph Snippet
+<meta property='og:title' content='Perfect Winery Venues for Unforgettable Events | VineVenues'>
+<meta property='og:description' content='Discover premier winery venues for weddings, corporate events, and celebrations. Search by region, compare layouts, and connect directly with breathtaking wine country spaces for your next unforgettable event.'>
+<meta property='og:image' content='https://example.com/images/og-1200x630.jpg'>
+<meta property='og:locale' content='en_US'>
+
+Language
+html_lang: — • og_locale: —
+
+References
+Google Search Essentials: Titles & snippets, Meta descriptions best practices, Open Graph protocol
 
 ## Troubleshooting
 
@@ -255,7 +215,3 @@ This workflow is available under the MIT License. See LICENSE file for details.
 - Email notification system
 - Comprehensive SEO metadata analysis
 - Secure credential-based configuration
-
----
-
-**Original Workflow URL**: https://deepthinklabs.app.n8n.cloud/workflow/kNBoh6bzML9vdxut
