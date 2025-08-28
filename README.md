@@ -37,31 +37,49 @@ This workflow automates the process of reviewing and analyzing SEO metadata for 
    - Select the `workflow.json` file or paste the GitHub raw URL
 
 3. **Configure API Credentials**
-   - Set up required API credentials (see Configuration section)
+   - Set up required API credentials in n8n (see Configuration section)
    - Configure webhook URLs if using HTTP triggers
    - Test connections to ensure proper setup
 
 ## Configuration
 
-### Required API Keys
+### Required n8n Credentials
 
-#### 1. Anthropic API Key
+This workflow uses n8n's credential system for secure API key management. You'll need to set up the following credentials:
+
+#### 1. Anthropic API Credentials
 For AI-powered SEO analysis and recommendations:
+
+**Setup**:
 - Sign up at [Anthropic Console](https://console.anthropic.com/)
 - Create an API key
-- Add to n8n credentials as "Anthropic API"
+- In n8n: Settings → Credentials → Add Credential
+- Select "HTTP Header Auth"
+- **Credential Name**: "Anthropic API"
+- **Header Name**: "x-api-key"
+- **Header Value**: Your Anthropic API key
 
-#### 2. Firecrawl API Key  
+#### 2. Firecrawl API Credentials
 For enhanced web scraping and content extraction:
+
+**Setup**:
 - Sign up at [Firecrawl](https://firecrawl.dev/)
 - Get your API key from the dashboard
-- Add to n8n credentials as "Firecrawl API"
+- In n8n: Settings → Credentials → Add Credential
+- Select "HTTP Header Auth"
+- **Credential Name**: "Firecrawl API"
+- **Header Name**: "Authorization"
+- **Header Value**: "Bearer YOUR_FIRECRAWL_API_KEY"
 
-#### 3. Email SMTP Configuration
+#### 3. SMTP Email Credentials
 For sending analysis reports via email:
-- Configure SMTP settings in n8n
-- Supported providers: Gmail, Outlook, SendGrid, Mailgun, etc.
-- Add to n8n credentials as "SMTP Email"
+
+**Setup**:
+- Configure your email provider (Gmail, Outlook, SendGrid, etc.)
+- In n8n: Settings → Credentials → Add Credential
+- Select "SMTP"
+- **Credential Name**: "SEO Email SMTP"
+- **Configure settings** based on your provider (see detailed guide in docs/CONFIGURATION.md)
 
 ### Input Parameters
 - **URLs**: Target websites to analyze
@@ -70,53 +88,25 @@ For sending analysis reports via email:
 - **Email Recipients**: Notification email addresses
 - **Analysis Options**: Custom SEO rules and preferences
 
-### Environment Variables
-```bash
-# Add these to your n8n environment
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-FIRECRAWL_API_KEY=your_firecrawl_api_key_here
-SMTP_HOST=your_smtp_host
-SMTP_PORT=587
-SMTP_USER=your_email@example.com
-SMTP_PASS=your_email_password
-WEBHOOK_URL=your_webhook_url
-OUTPUT_PATH=/path/to/output
-```
+### Credential Configuration Summary
 
-### n8n Credentials Setup
+| Service | Credential Type | Header/Field | Value Format |
+|---------|----------------|--------------|--------------|
+| Anthropic | HTTP Header Auth | x-api-key | `sk-ant-your-key` |
+| Firecrawl | HTTP Header Auth | Authorization | `Bearer fc-your-key` |
+| SMTP Email | SMTP | N/A | Host, port, user, password |
 
-1. **Anthropic Credentials**
-   ```
-   Credential Type: HTTP Header Auth
-   Name: Authorization
-   Value: Bearer YOUR_ANTHROPIC_API_KEY
-   ```
-
-2. **Firecrawl Credentials**
-   ```
-   Credential Type: HTTP Header Auth  
-   Name: Authorization
-   Value: Bearer YOUR_FIRECRAWL_API_KEY
-   ```
-
-3. **SMTP Credentials**
-   ```
-   Credential Type: SMTP
-   Host: your-smtp-host
-   Port: 587 (or appropriate port)
-   Secure: true/false (depending on provider)
-   User: your-email@example.com
-   Password: your-app-password
-   ```
+**Note**: All sensitive data is stored securely in n8n credentials. Never hardcode API keys in workflow nodes.
 
 ## Usage
 
 ### Manual Execution
 1. Open the workflow in n8n
-2. Provide target website URL
-3. Configure analysis parameters
-4. Click "Execute Workflow"
-5. Check email for detailed analysis report
+2. Ensure all credentials are configured
+3. Provide target website URL
+4. Configure analysis parameters
+5. Click "Execute Workflow"
+6. Check email for detailed analysis report
 
 ### Automated Execution
 - Configure triggers (webhook, cron, etc.)
@@ -131,9 +121,9 @@ Trigger → URL Processing → Firecrawl Scraping → Anthropic Analysis → Ema
 ```
 
 ### Key Nodes
-- **Firecrawl**: Enhanced web content extraction
-- **Anthropic Claude**: AI-powered SEO analysis
-- **Email**: Send formatted analysis reports
+- **Firecrawl**: Enhanced web content extraction (uses Firecrawl API credential)
+- **Anthropic Claude**: AI-powered SEO analysis (uses Anthropic API credential)
+- **Email**: Send formatted analysis reports (uses SMTP credential)
 - **Set**: Structure and format output data
 - **Code**: Custom logic and data processing
 - **Webhook**: Receive trigger events
@@ -203,35 +193,38 @@ The workflow produces comprehensive analysis reports:
 ### Common Issues
 
 **API Authentication Errors**
-- Verify API keys are correctly configured
-- Check credential names match node configurations
+- Verify credentials are correctly configured in n8n
+- Check credential names match those used in workflow nodes
 - Ensure API keys have sufficient permissions
+- Test credentials individually
 
 **Firecrawl Extraction Fails**
 - Check URL accessibility and robots.txt
-- Verify Firecrawl API limits and usage
-- Review extraction parameters
+- Verify Firecrawl API limits and usage in dashboard
+- Review extraction parameters in workflow
 
 **Anthropic Analysis Issues**
-- Confirm API key has Claude access
+- Confirm API key has Claude access in Anthropic dashboard
 - Check input data format and size limits
 - Review custom prompts for syntax errors
 
 **Email Delivery Problems**
-- Verify SMTP credentials and settings
+- Verify SMTP credentials and settings in n8n
+- Test SMTP connection using n8n's credential test feature
 - Check spam filters and email quotas
-- Test email configuration with simple messages
 
 ### Debug Mode
 1. Enable "Save Execution Progress" in workflow settings
 2. Check individual node outputs for errors
 3. Use "Execute Node" for targeted debugging
 4. Review n8n logs for detailed error messages
+5. Test credentials individually in n8n
 
 ## API Rate Limits
 
-- **Anthropic**: Varies by plan (check your dashboard)
-- **Firecrawl**: Varies by plan (typically 500-5000 requests/month)
+Monitor usage in respective dashboards:
+- **Anthropic**: Check usage in Anthropic Console
+- **Firecrawl**: Monitor limits in Firecrawl dashboard (typically 500-5000 requests/month)
 - **Email**: Depends on SMTP provider limits
 
 ## Contributing
@@ -251,6 +244,7 @@ This workflow is available under the MIT License. See LICENSE file for details.
 - 📧 Email: [dave@deepthinklabs.ai]
 - 🐛 Issues: [GitHub Issues](https://github.com/deepthinklabs-ai/seo-metadata-review-workflow/issues)
 - 📖 Documentation: [n8n Documentation](https://docs.n8n.io/)
+- 📋 Detailed Setup: [Configuration Guide](docs/CONFIGURATION.md)
 
 ## Changelog
 
@@ -260,6 +254,7 @@ This workflow is available under the MIT License. See LICENSE file for details.
 - Firecrawl integration for enhanced scraping
 - Email notification system
 - Comprehensive SEO metadata analysis
+- Secure credential-based configuration
 
 ---
 
