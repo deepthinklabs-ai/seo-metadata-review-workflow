@@ -4,7 +4,7 @@ An n8n workflow for automated SEO metadata review and analysis.
 
 ## Overview
 
-This workflow automates the process of reviewing and analyzing SEO metadata for websites, helping identify optimization opportunities and ensuring proper metadata implementation.
+This workflow automates the process of reviewing and analyzing SEO metadata for ENTIRE websites, helping identify optimization opportunities and ensuring proper metadata implementation. Completed analysis is emailed to the user for each page analyzed.
 
 ## Features
 
