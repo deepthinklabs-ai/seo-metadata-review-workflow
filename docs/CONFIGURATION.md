@@ -13,7 +13,7 @@ This guide provides detailed instructions for setting up all required API integr
 2. Sign up for an account or log in
 3. Navigate to "API Keys" section
 4. Click "Create Key" and give it a descriptive name
-5. Copy the API key (starts with `sk-ant-`)
+5. Copy the API key
 
 **n8n Credential Configuration**:
 1. Go to n8n Settings → Credentials
