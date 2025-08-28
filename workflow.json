@@ -3,25 +3,97 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "GET",
-        "path": "seo-metadata-review",
-        "responseMode": "responseNode",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ed173ad7-6ac1-4d27-a448-37597cb7957a",
+              "name": "site",
+              "value": "INSERT_WEBSITE_URL_TO_REVIEW",
+              "type": "string"
+            }
+          ]
+        },
         "options": {}
       },
-      "id": "webhook-trigger",
-      "name": "Webhook Trigger",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
       "position": [
-        240,
-        300
+        -1872,
+        240
       ],
-      "webhookId": "seo-metadata-review-webhook"
+      "id": "1885aef9-5714-42f7-afb0-02ee32eb31a7",
+      "name": "Init Site"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2096,
+        240
+      ],
+      "id": "11ae722d-d749-4b13-9744-17def7e7407d",
+      "name": "When clicking ‘Execute workflow’"
     },
     {
       "parameters": {
-        "url": "={{ $json.url }}",
+        "url": "={{ ($json.site || '').replace(/\\/+$/,'') + '/sitemap.xml' }}\n",
         "options": {
+          "allowUnauthorizedCerts": false,
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1648,
+        240
+      ],
+      "id": "d78fb644-c58d-468b-b2b2-56ef320fc9e3",
+      "name": "Fetch Sitemap",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Expect raw XML in $json.data or $json.body depending on your HTTP node\nconst xml = $json.data || $json.body || '';\n// Extract all <loc> values (handles namespaces and whitespace)\nconst locs = Array.from(xml.matchAll(/<loc[^>]*>\\s*([^<\\s][^<]*)\\s*<\\/loc>/gi))\n  .map(m => m[1].trim());\n\n// Emit each URL as its own item\nif (locs.length) {\n  return locs.map(u => ({ json: { url: u, source: 'sitemap' }}));\n}\n\n// If nothing found, emit a marker so we can trigger the fallback crawler later\nreturn [{ json: { url: null, source: 'sitemap', empty: true }}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1424,
+        240
+      ],
+      "id": "4cbb229f-446c-4c27-b505-f432e46bf91a",
+      "name": "Parse Sitemap"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ensure we output one item per URL regardless of input shape.\n// Handles: \n// 1) items already like {json:{url:\"...\"}}  -> passthrough\n// 2) single item whose json is an array of {url: \"...\"}  -> expand\n// 3) single item with { urls: [\"...\",\"...\"] }           -> expand\n// 4) single item with { data: [ {url:\"...\"} ] }         -> expand\n\nconst out = [];\n\n// Case 2/3/4: one item wrapping an array\nif (items.length === 1) {\n  const j = items[0].json;\n\n  // e.g. { urls: [\"...\",\"...\"] }\n  if (Array.isArray(j?.urls)) {\n    for (const u of j.urls) {\n      if (typeof u === 'string' && u.trim()) out.push({ json: { url: u.trim() } });\n    }\n    return out.length ? out : [{ json: { warning: 'No urls in j.urls' } }];\n  }\n\n  // e.g. json is already an array of objects\n  if (Array.isArray(j)) {\n    for (const row of j) {\n      const u = row?.url ?? row?.loc ?? row?.href;\n      if (typeof u === 'string' && u.trim()) out.push({ json: { url: u.trim() } });\n    }\n    return out.length ? out : [{ json: { warning: 'Array had no url fields' } }];\n  }\n\n  // e.g. { data: [ {url:\"...\"} ] }\n  if (Array.isArray(j?.data)) {\n    for (const row of j.data) {\n      const u = row?.url ?? row?.loc ?? row?.href;\n      if (typeof u === 'string' && u.trim()) out.push({ json: { url: u.trim() } });\n    }\n    return out.length ? out : [{ json: { warning: 'No url fields in json.data' } }];\n  }\n}\n\n// Case 1: already many items with {json:{url}}\nfor (const it of items) {\n  const u = it?.json?.url ?? it?.json?.loc ?? it?.json?.href;\n  if (typeof u === 'string' && u.trim()) out.push({ json: { url: u.trim() } });\n}\n\nreturn out.length ? out : [{ json: { warning: 'No URL fields found to expand' } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        240
+      ],
+      "id": "9bf6806b-832f-4ecf-8ef0-cf5a32bd98e9",
+      "name": "Expand URLs (If Grouped)"
+    },
+    {
+      "parameters": {
+        "method": "HEAD",
+        "url": "={{$json.url}}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
           "response": {
             "response": {
               "fullResponse": true
@@ -29,122 +101,1067 @@
           }
         }
       },
-      "id": "fetch-webpage",
-      "name": "Fetch Webpage",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        460,
-        300
-      ]
+        -752,
+        320
+      ],
+      "id": "174176c7-1e42-474a-81f9-f0c68b54ab6e",
+      "name": "Fetch Page (raw)",
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "dataPropertyName": "data",
-        "extractionValues": {
-          "values": [
-            {
-              "key": "title",
-              "cssSelector": "title",
-              "returnValue": "text"
-            },
-            {
-              "key": "description",
-              "cssSelector": "meta[name='description']",
-              "returnValue": "attribute",
-              "attribute": "content"
-            },
-            {
-              "key": "ogTitle",
-              "cssSelector": "meta[property='og:title']",
-              "returnValue": "attribute",
-              "attribute": "content"
-            },
-            {
-              "key": "ogDescription",
-              "cssSelector": "meta[property='og:description']",
-              "returnValue": "attribute",
-              "attribute": "content"
-            }
-          ]
+        "operation": "scrape",
+        "url": "={{$json.url}}",
+        "scrapeOptions": {
+          "options": {
+            "formats": [
+              "markdown",
+              "html"
+            ],
+            "headers": {},
+            "waitFor": 4000,
+            "mobile": true,
+            "skipTlsVerification": true,
+            "timeout": 90000
+          }
+        },
+        "requestOptions": {}
+      },
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -48
+      ],
+      "id": "0a895da9-5913-43be-b0ee-a5baceb30c59",
+      "name": "Render Page (SPA)",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "firecrawlApi": {
+          "id": "nht88FAgSiQOipXN",
+          "name": "Firecrawl account"
         }
       },
-      "id": "extract-metadata",
-      "name": "Extract Metadata",
-      "type": "n8n-nodes-base.htmlExtract",
-      "typeVersion": 1.2,
-      "position": [
-        680,
-        300
-      ]
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
-        "jsCode": "// SEO Analysis Logic\nconst url = $input.first()?.json?.url || '';\nconst metadata = $input.first()?.json || {};\n\n// Title Analysis\nconst title = metadata.title || '';\nconst titleLength = title.length;\nconst titleRecommendations = [];\n\nif (titleLength === 0) {\n  titleRecommendations.push('Missing title tag');\n} else if (titleLength < 30) {\n  titleRecommendations.push('Title too short (recommended: 30-60 characters)');\n} else if (titleLength > 60) {\n  titleRecommendations.push('Title too long (recommended: 30-60 characters)');\n}\n\n// Description Analysis\nconst description = metadata.description || '';\nconst descriptionLength = description.length;\nconst descriptionRecommendations = [];\n\nif (descriptionLength === 0) {\n  descriptionRecommendations.push('Missing meta description');\n} else if (descriptionLength < 120) {\n  descriptionRecommendations.push('Description too short (recommended: 120-160 characters)');\n} else if (descriptionLength > 160) {\n  descriptionRecommendations.push('Description too long (recommended: 120-160 characters)');\n}\n\n// Open Graph Analysis\nconst ogRecommendations = [];\nif (!metadata.ogTitle) {\n  ogRecommendations.push('Missing Open Graph title');\n}\nif (!metadata.ogDescription) {\n  ogRecommendations.push('Missing Open Graph description');\n}\n\n// Overall Score Calculation\nlet score = 100;\nscore -= titleRecommendations.length * 20;\nscore -= descriptionRecommendations.length * 15;\nscore -= ogRecommendations.length * 10;\n\nconst analysis = {\n  url: url,\n  metadata: metadata,\n  analysis: {\n    title: {\n      length: titleLength,\n      recommendations: titleRecommendations\n    },\n    description: {\n      length: descriptionLength,\n      recommendations: descriptionRecommendations\n    },\n    openGraph: {\n      recommendations: ogRecommendations\n    },\n    overallScore: Math.max(0, score),\n    timestamp: new Date().toISOString()\n  }\n};\n\nreturn [analysis];"
+        "options": {}
       },
-      "id": "analyze-seo",
-      "name": "Analyze SEO",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -304,
+        16
+      ],
+      "id": "af17dc8d-f9ef-484d-95e4-e6a79fa3a63a",
+      "name": "Split URLs"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        144,
+        16
+      ],
+      "id": "073fb45d-342c-47ea-be4e-a63e297ff5b0",
+      "name": "Wait",
+      "webhookId": "4d943a00-cb9f-4ee3-af8f-fc168b852e5f"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -976,
+        384
+      ],
+      "id": "93a4ce8f-ae6a-4c55-917c-59032ca0f1db",
+      "name": "Split URLs1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        144,
+        384
+      ],
+      "id": "13f61a17-2f84-49c1-a2b9-c009385fcebd",
+      "name": "Wait1",
+      "webhookId": "4d943a00-cb9f-4ee3-af8f-fc168b852e5f"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9ca50bb4-a782-4e9a-a7b4-9ab467d3275d",
+              "leftValue": "={{ $json.statusCode === 405 || !!$json.error }}\n }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -528,
+        320
+      ],
+      "id": "9ef4f9d1-3871-4bcd-8d36-d04e64387b7c",
+      "name": "IF Head Unsupported"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "7ff4deaf-a60c-4634-91b6-70cbfb4b332f",
+              "name": "raw_status",
+              "value": "={{$json.statusCode}}",
+              "type": "string"
+            },
+            {
+              "id": "9a7fa012-98de-4304-ba08-e3fe7b9849f5",
+              "name": "raw_content_type",
+              "value": "={{$json.headers?.[\"content-type\"] || \"\"}}",
+              "type": "string"
+            },
+            {
+              "id": "06e21346-fc93-4bc5-b85c-63df5a7c68ac",
+              "name": "raw_cache_control",
+              "value": "={{$json.headers?.[\"cache-control\"] || \"\"}}",
+              "type": "string"
+            },
+            {
+              "id": "3d210d6f-348c-424c-bd77-61ab28962e60",
+              "name": "raw_x_robots",
+              "value": "={{$json.headers?.[\"x-robots-tag\"] || \"\"}}",
+              "type": "string"
+            },
+            {
+              "id": "aced6c63-70a7-4e26-bca8-e95e707bdd19",
+              "name": "raw_server",
+              "value": "={{$json.headers?.[\"server\"] || \"\"}}",
+              "type": "string"
+            },
+            {
+              "id": "114fc53d-fced-4f68-a2a5-acb41d77ef4b",
+              "name": "redirect_location",
+              "value": "={{$json.headers?.[\"location\"] || \"\"}}",
+              "type": "string"
+            },
+            {
+              "id": "979ab929-08eb-4e18-bb69-8322eafa8aab",
+              "name": "url_in",
+              "value": "={{ $('Split URLs1').item.json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "d3ddd47e-7887-4ec5-9528-5aeac40544b3",
+              "name": "raw_link",
+              "value": "={{$json.headers?.['link'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "7430d979-ee91-4767-8700-e94b50e71cc6",
+              "name": "raw_vary",
+              "value": "={{$json.headers?.['vary'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "fa77c42d-8d45-4aee-a65e-0a4be953d18f",
+              "name": "raw_content_encoding",
+              "value": "={{$json.headers?.['content-encoding'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "6e6ed7ad-0763-4ec1-9af6-a28642da739d",
+              "name": "raw_last_modified",
+              "value": "={{$json.headers?.['last-modified'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "8affb666-6727-482a-9915-a762c8b4ec07",
+              "name": "raw_etag",
+              "value": "={{$json.headers?.['etag'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "6add3be5-de32-4ff8-a3db-0b3316b49cdf",
+              "name": "raw_cache_status",
+              "value": "={{$json.headers?.['cf-cache-status'] || $json.headers?.['x-cache'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "317488f7-e6fb-4dcb-a885-178853a148b4",
+              "name": "raw_content_length",
+              "value": "={{$json.headers?.['content-length'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "da9a85cb-77b6-4550-9169-8e54e606bb4f",
+              "name": "raw_age",
+              "value": "={{$json.headers?.['age'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "52a5d0bf-de4f-449a-8d9f-340c69e436ec",
+              "name": "raw_date",
+              "value": "={{$json.headers?.['date'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "1b33ffca-092f-47a1-a8db-db09f4920679",
+              "name": "sec_hsts",
+              "value": "={{$json.headers?.['strict-transport-security'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "54141e04-8a15-415e-a19f-8f9267db1529",
+              "name": "sec_csp",
+              "value": "={{$json.headers?.['content-security-policy'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "d16adfac-7668-4953-987c-288771b8a8f9",
+              "name": "sec_xcto",
+              "value": "={{$json.headers?.['x-content-type-options'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "96348a83-296c-43c4-85bb-03e510329d49",
+              "name": "sec_xfo",
+              "value": "={{$json.headers?.['x-frame-options'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "6bfae9fe-6550-49c2-9131-55166a7d33a1",
+              "name": "sec_referrer",
+              "value": "={{$json.headers?.['referrer-policy'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "70c14278-e2a7-4b91-bf1f-5a04b7326d2f",
+              "name": "sec_permissions",
+              "value": "={{$json.headers?.['permissions-policy'] || ''}}",
+              "type": "string"
+            },
+            {
+              "id": "010c49db-2598-42be-a4b7-034297f74a8b",
+              "name": "is_redirect",
+              "value": "={{ (Number($json.statusCode) >= 300 && Number($json.statusCode) < 400) || !!$json.headers?.['location'] }}",
+              "type": "string"
+            },
+            {
+              "id": "e2730351-4ed3-45b6-b689-dda853f8b582",
+              "name": "is_cacheable",
+              "value": "={{ String($json.headers?.['cache-control'] || '').toLowerCase().includes('max-age') && !String($json.headers?.['cache-control'] || '').toLowerCase().includes('no-store') }}",
+              "type": "string"
+            },
+            {
+              "id": "f422ed25-895a-466a-8b9f-0f7635d6a3a8",
+              "name": "is_compressed",
+              "value": "={{ /(br|gzip|zstd)/.test(String($json.headers?.['content-encoding'] || '').toLowerCase()) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -80,
+        320
+      ],
+      "id": "73cc2597-3019-4444-8971-51eb76effa6e",
+      "name": "Raw Clean"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Split URLs1').item.json.url }}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -304,
+        384
+      ],
+      "id": "fae67ad2-1633-4491-8882-c50898fbd213",
+      "name": "Raw Get Fallback",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4205bfbd-5959-4e31-8d8d-33a39387f5ba",
+              "name": "source_url",
+              "value": "={{ $json.data?.metadata?.url ?? $json.url_in ?? $json.data?.metadata?.sourceURL ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "0698caca-94c5-4a07-935c-7acaf75ad91a",
+              "name": "final_url",
+              "value": "={{ $json.redirect_location || \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "22d92a3e-5a6e-4f66-9346-e779d30180cd",
+              "name": "http_status",
+              "value": "={{ Number($json.raw_status ?? $json.data?.metadata?.statusCode ?? 0) }}",
+              "type": "number"
+            },
+            {
+              "id": "fb245df7-4c7a-4806-a9d6-962912d099a5",
+              "name": "content_type",
+              "value": "={{ $json.raw_content_type ?? $json.data?.metadata?.contentType ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "66c61397-cb17-4f9e-b655-c931f43ea339",
+              "name": "x_robots_tag",
+              "value": "={{ $json.raw_x_robots ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "2671697a-073d-486f-b5b8-dd70072ff8b6",
+              "name": "cache_control",
+              "value": "={{ $json.raw_cache_control ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "03f512ce-2279-4da1-8b22-b7aef2d50186",
+              "name": "server",
+              "value": "={{ $json.raw_server ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "7f35791e-619b-4674-9e3d-3107625710ed",
+              "name": "title",
+              "value": "={{ $json.data?.metadata?.title ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "5274650c-bbc0-417a-9702-02de7238281c",
+              "name": "meta_description",
+              "value": "={{ $json.data?.metadata?.description ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "50c0c1c3-e764-45da-976f-f4346bfb437d",
+              "name": "robots_meta",
+              "value": "={{ Array.isArray($json.data?.metadata?.robots) ? $json.data.metadata.robots.join(\", \") : ($json.data?.metadata?.robots ?? \"\") }}",
+              "type": "string"
+            },
+            {
+              "id": "1d9950d2-87de-4f63-9da1-60c1dd916dde",
+              "name": "og_url",
+              "value": "={{ $json.data?.metadata?.ogUrl ?? $json.data?.metadata?.[\"og:url\"] ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "02a71957-5687-4480-96cc-786a9a62cc85",
+              "name": "markdown",
+              "value": "={{ $json.data?.markdown ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "99f8dfe8-8229-4743-89c2-07d32b8d1034",
+              "name": "html",
+              "value": "={{ $json.data?.html ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e01ea0a8-7dfb-4359-891a-f658df244c51",
+              "name": "is_html",
+              "value": "={{ String($json.raw_content_type || \"\").toLowerCase().includes(\"text/html\") }}",
+              "type": "boolean"
+            },
+            {
+              "id": "e5419372-d9cd-4d97-9ce1-8cc491c14cbc",
+              "name": "has_noindex",
+              "value": "={{ String($json.raw_x_robots || \"\").toLowerCase().includes(\"noindex\") }}",
+              "type": "boolean"
+            },
+            {
+              "id": "c44665c2-69b9-423f-aeab-946b39648d67",
+              "name": "vary",
+              "value": "={{ $json.raw_vary ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "afa17b86-0710-4fe4-977a-2eafea0788cb",
+              "name": "content_encoding",
+              "value": "={{ $json.raw_content_encoding ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "0596aa1b-d7ba-4457-8d32-c9ec8015f7b6",
+              "name": "last_modified",
+              "value": "={{ $json.raw_last_modified ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "364438cd-fadb-4ad2-ab12-b598ae07bdab",
+              "name": "etag",
+              "value": "={{ $json.raw_etag ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "21f91c8d-bb18-44d5-bcba-cf017b6fcc3c",
+              "name": "cache_status",
+              "value": "={{ $json.raw_cache_status ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "c313a234-752a-47f9-9252-607a24eec92d",
+              "name": "content_length",
+              "value": "={{ $json.raw_content_length ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "260ed266-0069-4cb3-a7e8-1758608d5a09",
+              "name": "age",
+              "value": "={{ $json.raw_age ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "955efc89-7e2c-43b5-8f67-f9aa0debfae9",
+              "name": "date_header",
+              "value": "={{ $json.raw_date ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "e8c811f1-45c1-464e-8592-c60c05d4534c",
+              "name": "link_header",
+              "value": "={{ $json.raw_link ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "0be3c6ec-f162-42a0-9a65-84b9b97f4562",
+              "name": "hsts",
+              "value": "={{ $json.sec_hsts ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "ed84aabe-eb27-44ac-af27-d3a71f189c20",
+              "name": "csp",
+              "value": "={{ $json.sec_csp ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "be092904-859b-4825-a25d-259be3619a73",
+              "name": "x_content_type_options",
+              "value": "={{ $json.sec_xcto ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "16ab0af6-bdfb-455c-b562-f710f4fc54ce",
+              "name": "x_frame_options",
+              "value": "={{ $json.sec_xfo ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "6b186be7-6e27-4407-b5e0-e7785506257b",
+              "name": "referrer_policy",
+              "value": "={{ $json.sec_referrer ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "7aa770a5-1c60-4c9b-8e28-35a45ac7be04",
+              "name": "permissions_policy",
+              "value": "={{ $json.sec_permissions ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "23a58a7d-9d16-4431-9f30-5b03fff386a8",
+              "name": "is_redirect",
+              "value": "={{ (Number($json.raw_status)||0) >= 300 && (Number($json.raw_status)||0) < 400 || !!$json.redirect_location }}",
+              "type": "boolean"
+            },
+            {
+              "id": "bf426069-77b4-4cc3-8231-6bf8392a8a53",
+              "name": "is_cacheable",
+              "value": "={{ String($json.raw_cache_control || '').toLowerCase().includes('max-age') && !String($json.raw_cache_control || '').toLowerCase().includes('no-store') }}",
+              "type": "boolean"
+            },
+            {
+              "id": "03a65cf4-312b-4a9f-a1a5-6368dbe30aaa",
+              "name": "is_compressed",
+              "value": "={{ /(br|gzip|zstd)/.test(String($json.raw_content_encoding || '').toLowerCase()) }}",
+              "type": "boolean"
+            },
+            {
+              "id": "e2f9352d-04ce-415c-9aab-58a104611a8f",
+              "name": "cache_ttl_s",
+              "value": "={{ Number(($json.raw_cache_control || '').match(/max-age=(\\d+)/)?.[1] || 0) }}",
+              "type": "number"
+            },
+            {
+              "id": "cf74c1d4-c940-4bfc-8f65-98238b655fdb",
+              "name": "canonical_from_header",
+              "value": "={{ ($json.raw_link || '').match(/<([^>]+)>;\\s*rel=\"?canonical\"?/i)?.[1] || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        592,
+        240
+      ],
+      "id": "24c0b278-21a1-4677-9883-66a7f7ca8950",
+      "name": "Build Page Context"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        368,
+        240
+      ],
+      "id": "a3eef27e-30c5-4307-872f-794163e7a37f",
+      "name": "Join URL + Response"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify($json) }}",
+        "options": {
+          "systemMessage": "You are an expert Technical SEO metadata auditor (2025 best practices). The user message is ONE JSON object with fields like:\nsource_url, title, meta_description, html_lang, og_title, og_description, og_image, og_locale\n(Optional if provided: h1, word_count)\n\nGoal: evaluate on-page metadata quality and completeness for THIS URL and return ONE minified JSON object with a 0–100 score, findings, P0/P1/P2 recommendations, and references. Use ONLY provided fields; do not invent sitewide data. Always include \"page_url\" and set it to the provided source_url (or \"\" if missing).\n\nEvaluation rules (prioritized):\n1) Title tag\n   - Present, unique-leaning (avoid generic boilerplate), clear primary topic.\n   - Length heuristic (char-based proxy for pixel width): ideal 50–60; too short <20; too long >60.\n   - Prefer primary keyword(s) first; brand may be appended if present in current title (do not invent brand).\n   - Avoid stuffing, pipes/dashes overuse, ALL CAPS, emojis.\n2) Meta description\n   - Present, persuasive summary; includes primary intent and value prop.\n   - Length heuristic: ideal 120–155; too short <70; too long >160.\n   - Avoid duplication of title; avoid keyword stuffing.\n3) Alignment (optional if h1 provided)\n   - Title/H1 intent alignment; flag mismatches (advisory).\n4) Language & locale\n   - html_lang present; og_locale present.\n   - Minor variants like \"en\" vs \"en_US\" are OK; flag only major mismatches (e.g., \"en\" vs \"fr_FR\") or missing values.\n5) Open Graph (social share readiness)\n   - Presence of og:title/og:description/og:image/og:locale.\n   - If missing og:title/description, recommend fallback to title/meta description.\n   - og:image should be absolute URL; recommend 1200×630 (1.91:1) and fast CDN delivery.\n6) Quality heuristics\n   - Thin/ambiguous messaging: if title+description lack specific nouns/verbs relevant to page purpose (use given text only).\n   - Word count advisory (if provided): very low content (<150 words) does not block metadata but warn for snippet quality.\n\nScoring (start at 100; clamp 0–100):\n- Title: −30 if missing; −10 if too long; −8 if too short; −8 if generic/boilerplate; −6 if likely stuffing.\n- Meta description: −20 if missing; −8 if too long; −6 if too short; −6 if generic/duplicative of title; −4 if likely stuffing.\n- Alignment (if h1 provided): −5 if misaligned intent.\n- Language/locale: −3 if major mismatch; −2 each if missing (cap −4).\n- Open Graph: −3 each missing core field (title/description/image) (cap −9); −3 if image URL not absolute.\n- Quality heuristics: −5 if messaging unclear.\nIf title OR meta description is missing, cap max score at 70.\n\nOutput (STRICT single-line JSON only; no markdown/prose):\n{\n  \"page_url\":\"<source_url-or-empty>\",\n  \"score\":<int>,\n  \"title\":{\"present\":true|false,\"length\":<int>,\"too_short\":true|false,\"too_long\":true|false,\"issues\":[\"...\"],\"suggested\":\"<optional improved title>\"},\n  \"meta_description\":{\"present\":true|false,\"length\":<int>,\"too_short\":true|false,\"too_long\":true|false,\"issues\":[\"...\"],\"suggested\":\"<optional improved description>\"},\n  \"alignment\":{\"h1\":\"<string or empty>\",\"aligned\":true|false,\"issues\":[\"...\"]},\n  \"language\":{\"html_lang\":\"<string or empty>\",\"og_locale\":\"<string or empty>\",\"issues\":[\"...\"]},\n  \"open_graph\":{\"present\":true|false,\"missing\":[\"title\",\"description\",\"image\",\"locale\"],\"image_warnings\":[\"...\"],\"notes\":[\"...\"]},\n  \"findings\":[{\"id\":\"TITLE\",\"severity\":\"high|medium|low\",\"detail\":\"...\"},\n              {\"id\":\"META_DESCRIPTION\",\"severity\":\"high|medium|low\",\"detail\":\"...\"},\n              {\"id\":\"OPEN_GRAPH\",\"severity\":\"high|medium|low\",\"detail\":\"...\"},\n              {\"id\":\"LANG\",\"severity\":\"low\",\"detail\":\"...\"}],\n  \"recommendations\":[{\"action\":\"...\",\"priority\":\"P0|P1|P2\",\"rationale\":\"...\"}],\n  \"references\":[\"Google Search Essentials: Titles & snippets\",\"Meta descriptions best practices\",\"Open Graph protocol\"]\n}\n\nInstructions:\n- Set \"page_url\" to source_url (or \"\" if missing).\n- Treat missing fields as unknown; do not claim sitewide duplication.\n- Preserve key nouns/phrases already present when suggesting rewrites; do NOT invent brands or features.\n- If og fields are missing, suggest pragmatic fallbacks (e.g., set og:title=title).\n- Make recommendations specific and prioritized (P0=critical, P1=important, P2=nice-to-have).\n- Return ONE minified JSON object only.\n"
+        }
+      },
+      "id": "8d6c20a1-26d3-4b08-9ebf-74a268b74461",
+      "name": "Metadata Review Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        1072,
+        240
+      ],
+      "typeVersion": 1.7
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "50d71409-de08-46eb-aab6-72b85b3099d5",
+              "name": "source_url",
+              "value": "={{ $json.source_url }}",
+              "type": "string"
+            },
+            {
+              "id": "0c8fe049-c9f5-4b29-af0b-afb1e715bd88",
+              "name": "title",
+              "value": "={{ $json.title }}",
+              "type": "string"
+            },
+            {
+              "id": "4fe791fe-ce9d-4a16-ab95-20d9c269eab1",
+              "name": "meta_description",
+              "value": "={{ $json.meta_description }}",
+              "type": "string"
+            },
+            {
+              "id": "34ff96bc-2527-4ca6-888f-29ccc1614d9a",
+              "name": "html_lang",
+              "value": "={{ $json.html_lang }}",
+              "type": "string"
+            },
+            {
+              "id": "f7a94b72-a928-4d99-99ac-8f14083fb0ee",
+              "name": "og_title",
+              "value": "={{ $json.og_title }}",
+              "type": "string"
+            },
+            {
+              "id": "8fc3ae18-15e9-4682-91b9-333b80b7d581",
+              "name": "og_description",
+              "value": "={{ $json.og_description }}",
+              "type": "string"
+            },
+            {
+              "id": "96c9ec0e-fc70-4ed2-be57-9f4bc4866611",
+              "name": "og_image",
+              "value": "={{ $json.og_image }}",
+              "type": "string"
+            },
+            {
+              "id": "94b3bcbd-f4d7-4029-8351-cd835bac5401",
+              "name": "og_locale",
+              "value": "={{ $json.og_locale }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        800,
+        240
+      ],
+      "id": "fcc85412-dbb0-453e-81bd-59ad0cd4f262",
+      "name": "Set for Metadata Review Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-20250514",
+          "cachedResultName": "Claude 4 Sonnet"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        944,
+        384
+      ],
+      "id": "22b63258-f234-44ae-a64d-1654e92fd8cb",
+      "name": "Anthropic Chat Model1",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Cu7UhQCsQna6iUHz",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Metadata Review Agent response\n// Input shape example: item.json.output = \"{\\\"page_url\\\":\\\"https://...\\\", ... }\"\n// Output: a clean object ready for the writer/email\n\nreturn items.map(item => {\n  // 1) Upstream URL fallback (from your Set node)\n  const upstreamUrl =\n    item.json.source_url ??\n    item.json.final_url ??\n    item.json.page_url ??\n    item.json.url ??\n    \"\";\n\n  // 2) Parse model payload (tolerate double-encoded JSON)\n  const raw = item.json.output ?? item.json;\n  let data = raw;\n  try {\n    if (typeof data === \"string\") data = JSON.parse(data);\n    if (typeof data === \"string\") data = JSON.parse(data);\n  } catch (e) {\n    data = { parse_error: e.message, raw };\n  }\n\n  // 3) Pull sections with safe defaults\n  const pageUrl = data.page_url || upstreamUrl || \"\";\n  const score   = data.score ?? null;\n\n  const title = data.title ?? {};\n  const meta  = data.meta_description ?? {};\n  const align = data.alignment ?? {};\n  const lang  = data.language ?? {};\n  const og    = data.open_graph ?? {};\n\n  const findings = Array.isArray(data.findings) ? data.findings : [];\n  const recs     = Array.isArray(data.recommendations) ? data.recommendations : [];\n  const refs     = Array.isArray(data.references) ? data.references : [];\n\n  // 4) Convenience fields\n  const suggestedTitle = title?.suggested || \"\";\n  const suggestedDesc  = meta?.suggested  || \"\";\n  const ogMissing      = Array.isArray(og.missing) ? og.missing : [];\n  const ogImageWarn    = Array.isArray(og.image_warnings) ? og.image_warnings : [];\n  const ogNotes        = Array.isArray(og.notes) ? og.notes : [];\n\n  // 5) Group recommendations by priority\n  const grouped = { P0: [], P1: [], P2: [] };\n  for (const r of recs) {\n    const p = (r.priority || \"P2\").toUpperCase();\n    if (!grouped[p]) grouped[p] = [];\n    grouped[p].push({\n      action: r.action || \"\",\n      rationale: r.rationale || \"\"\n    });\n  }\n\n  // 6) Emit normalized shape\n  return {\n    json: {\n      category: \"Metadata\",\n      page_url: pageUrl,\n      score,\n\n      // raw sections (kept intact for traceability)\n      title,\n      meta_description: meta,\n      alignment: align,\n      language: lang,\n      open_graph: og,\n\n      // conveniences\n      suggested_title: suggestedTitle,\n      suggested_meta_description: suggestedDesc,\n      og_missing: ogMissing,\n      og_image_warnings: ogImageWarn,\n      og_notes: ogNotes,\n\n      findings,                // [{id, severity, detail}]\n      recommendations: recs,   // [{action, priority, rationale}]\n      references: refs,\n\n      // grouped for easy bullets/tables\n      recs_grouped: grouped,   // {P0:[{action,rationale}], P1:[...], P2:[...]}\n\n      // handy flags\n      has_p0: (grouped.P0 && grouped.P0.length > 0) || false,\n      has_p1: (grouped.P1 && grouped.P1.length > 0) || false\n    }\n  };\n});\n"
+      },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
-        300
-      ]
+        1424,
+        240
+      ],
+      "id": "114bc6f7-bbc0-4404-bcac-738a7e66e2b2",
+      "name": "Code"
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json }}"
+        "modelId": {
+          "__rl": true,
+          "value": "claude-sonnet-4-20250514",
+          "mode": "list",
+          "cachedResultName": "claude-sonnet-4-20250514"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Use the data below to write the section. Do NOT include any raw JSON.\n\nPage URL: {{ $json.page_url }}\nScore: {{ $json.score }}\n\nFindings:\n{{ $json.findings && $json.findings.length ? $json.findings.map(f => `- (${f.severity}) ${f.detail}`).join('\\n') : '- None' }}\n\nGrouped Recommendations:\nP0:\n{{ $json.recs_grouped.P0 && $json.recs_grouped.P0.length ? $json.recs_grouped.P0.map(r => `- ${r.action} — ${r.rationale}`).join('\\n') : '- None' }}\n\nP1:\n{{ $json.recs_grouped.P1 && $json.recs_grouped.P1.length ? $json.recs_grouped.P1.map(r => `- ${r.action} — ${r.rationale}`).join('\\n') : '- None' }}\n\nP2:\n{{ $json.recs_grouped.P2 && $json.recs_grouped.P2.length ? $json.recs_grouped.P2.map(r => `- ${r.action} — ${r.rationale}`).join('\\n') : '- None' }}\n\nSuggested Title:\n{{ $json.suggested_title || '' }}\n\nSuggested Meta Description:\n{{ $json.suggested_meta_description || '' }}\n\nOG missing fields: {{ $json.og_missing && $json.og_missing.length ? $json.og_missing.join(', ') : 'none' }}\nOG notes: {{ $json.og_notes && $json.og_notes.length ? $json.og_notes.join(', ') : '' }}\n\nLanguage:\nhtml_lang={{ $json.language.html_lang || '' }}, og_locale={{ $json.language.og_locale || '' }}\n\nConstraints & tips to apply:\n- Title target length 50–60 characters.\n- Meta description 120–155 characters (truncate if longer).\n- If OG missing, include a ready-to-paste snippet with 1200×630 image.\n- Prefer “en_US” if html_lang is “en”.\n"
+            }
+          ]
+        },
+        "options": {
+          "system": "You are an SEO Report Writer Agent (2025). You receive normalized METADATA results for ONE page.\n\nWrite a concise, client‑friendly section with:\n- A 2–3 sentence summary in plain English.\n- A prioritized fix list grouped by P0/P1/P2.\n- For each fix, include:\n  • Why it matters (1 line).\n  • How to fix (1–3 concrete steps). If relevant, show tiny code snippets.\n\nRules:\n- No JSON. Output readable report prose with bullets and short code blocks where useful.\n- If suggested title/description are provided, surface them as “Recommended”.\n- If Open Graph fields are missing, include a ready‑to‑paste `<meta>` block.\n- Keep the whole section tight and actionable.\n\nFormat exactly:\n1) Page: <URL>\n2) Score & Verdict: <score>/100 — Metadata\n3) Summary:\n   <2–3 sentences>\n4) Priority Fixes:\n   - P0 (Critical):\n     - <Fix name> — <1‑line>\n       • Why it matters: <1 line>\n       • How to fix: <steps and tiny code if helpful>\n   - P1 (High):\n     - ...\n   - P2 (Medium/Low):\n     - ...\n5) Recommended Title (if present):\n   <code>Title text</code>\n6) Recommended Meta Description (if present):\n   <code>Description text</code>\n7) Open Graph Snippet (only if OG is missing or incomplete):\n   <code>\n   <meta property=\"og:title\" content=\"...\">\n   <meta property=\"og:description\" content=\"...\">\n   <meta property=\"og:image\" content=\"https://.../image1200x630.jpg\">\n   <meta property=\"og:locale\" content=\"en_US\">\n   </code>\n8) References consulted: <comma-separated>  // omit if none\n"
+        }
       },
-      "id": "webhook-response",
-      "name": "Webhook Response",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
       "position": [
-        1120,
-        300
-      ]
+        1648,
+        336
+      ],
+      "id": "95998ed3-7add-4476-92cd-74f0251f907c",
+      "name": "Report Writer - Metadata",
+      "credentials": {
+        "anthropicApi": {
+          "id": "Cu7UhQCsQna6iUHz",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "45e474d2-7532-4f08-959f-c0e8ccbf7e9c",
+              "name": "writer_text",
+              "value": "={{ $json.content[0].text || $json.text || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2000,
+        336
+      ],
+      "id": "003bfffb-d9c0-4653-90bd-c824d3dd3022",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2272,
+        256
+      ],
+      "id": "0fb8847f-586c-4058-b0f1-35bc896c82bf",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "fromEmail": "INSERT_FROM_EMAIL",
+        "toEmail": "INSERT_TO_EMAIL",
+        "subject": "=SEO Report — Metadata — {{$json.page_url}} ({{$json.score}}/100)",
+        "html": "=<h2 style=\"margin:0 0 8px 0;\">Metadata Report</h2>\n\n<p style=\"margin:0 0 6px 0;\">\n  <strong>Page:</strong> <a href=\"{{$json.page_url}}\" target=\"_blank\">{{$json.page_url}}</a><br/>\n  <strong>Score:</strong> {{$json.score}}/100\n</p>\n\n<h3 style=\"margin:12px 0 6px 0;\">Key Findings</h3>\n<ul style=\"margin:0 0 10px 20px; padding:0;\">\n  {{ $json.findings && $json.findings.length\n      ? $json.findings.map(f => `<li><strong>${String(f.severity || '').toUpperCase()}</strong> — ${f.detail}</li>`).join('')\n      : '<li>None reported</li>' }}\n</ul>\n\n<h3 style=\"margin:12px 0 6px 0;\">Priority Fixes</h3>\n<table cellpadding=\"6\" cellspacing=\"0\" border=\"0\" style=\"border-collapse:collapse; width:100%; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;\">\n  <thead>\n    <tr>\n      <th align=\"left\" style=\"border-bottom:1px solid #ddd;\">Priority</th>\n      <th align=\"left\" style=\"border-bottom:1px solid #ddd;\">Action</th>\n      <th align=\"left\" style=\"border-bottom:1px solid #ddd;\">Why it matters</th>\n    </tr>\n  </thead>\n  <tbody>\n    {{ $json.recommendations && $json.recommendations.length \n      ? $json.recommendations.map(r => `\n        <tr>\n          <td style=\"border-bottom:1px solid #f0f0f0;\"><strong>${r.priority}</strong></td>\n          <td style=\"border-bottom:1px solid #f0f0f0;\">${r.action}</td>\n          <td style=\"border-bottom:1px solid #f0f0f0;\">${r.rationale}</td>\n        </tr>`).join('')\n      : `<tr><td colspan=\"3\">No recommendations reported</td></tr>` }}\n  </tbody>\n</table>\n\n<!-- Suggested improvements (only if present) -->\n{{ $json.suggested_title \n  ? `<h3 style=\"margin:14px 0 6px 0;\">Recommended Title</h3>\n     <pre style='background:#fafafa;border:1px solid #eee;padding:10px;border-radius:6px;white-space:pre-wrap;margin:0 0 10px 0;'>${$json.suggested_title}</pre>`\n  : '' }}\n\n{{ $json.suggested_meta_description \n  ? `<h3 style=\"margin:12px 0 6px 0;\">Recommended Meta Description</h3>\n     <pre style='background:#fafafa;border:1px solid #eee;padding:10px;border-radius:6px;white-space:pre-wrap;margin:0 0 10px 0;'>${$json.suggested_meta_description}</pre>`\n  : '' }}\n\n<!-- Open Graph snippet (render only if OG is missing) -->\n{{ ($json.og_missing && $json.og_missing.length) \n  ? `<h3 style=\"margin:12px 0 6px 0;\">Open Graph Snippet</h3>\n     <pre style='background:#fafafa;border:1px solid #eee;padding:10px;border-radius:6px;white-space:pre-wrap;margin:0 0 10px 0;'>&lt;meta property='og:title' content='${$json.suggested_title || ''}'&gt;\n&lt;meta property='og:description' content='${$json.suggested_meta_description || ''}'&gt;\n&lt;meta property='og:image' content='https://example.com/images/og-1200x630.jpg'&gt;\n&lt;meta property='og:locale' content='${($json.language && $json.language.og_locale) ? $json.language.og_locale : 'en_US'}'&gt;</pre>`\n  : '' }}\n\n<h4 style=\"margin:14px 0 6px 0;\">Language</h4>\n<p style=\"margin:0 0 10px 0;\">\n  html_lang: {{$json.language && $json.language.html_lang ? $json.language.html_lang : '—'}} •\n  og_locale: {{$json.language && $json.language.og_locale ? $json.language.og_locale : '—'}}\n</p>\n\n<h4 style=\"margin:14px 0 6px 0;\">References</h4>\n<p style=\"margin:0 0 10px 0;\">\n  {{ $json.references && $json.references.length ? $json.references.join(', ') : '—' }}\n</p>\n\n<hr style=\"border:none;border-top:1px solid #eee;margin:12px 0;\"/>\n\n<p style=\"color:#666;font-size:12px;margin-top:6px;\">\n  Category: {{$json.category}}\n</p>\n\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2448,
+        256
+      ],
+      "id": "3e527bf2-681d-45e5-8451-e97a3346fa56",
+      "name": "Send email1",
+      "webhookId": "c6a02e2c-682d-4df2-a049-10bcfcbfd947",
+      "credentials": {
+        "smtp": {
+          "id": "3KJnq7gQyvPNuZnu",
+          "name": "DTL Gmail"
+        }
+      }
     }
   ],
+  "pinData": {},
   "connections": {
-    "Webhook Trigger": {
+    "Init Site": {
       "main": [
         [
           {
-            "node": "Fetch Webpage",
+            "node": "Fetch Sitemap",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Fetch Webpage": {
+    "When clicking ‘Execute workflow’": {
       "main": [
         [
           {
-            "node": "Extract Metadata",
+            "node": "Init Site",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Extract Metadata": {
+    "Fetch Sitemap": {
       "main": [
         [
           {
-            "node": "Analyze SEO",
+            "node": "Parse Sitemap",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Analyze SEO": {
+    "Parse Sitemap": {
       "main": [
         [
           {
-            "node": "Webhook Response",
+            "node": "Expand URLs (If Grouped)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand URLs (If Grouped)": {
+      "main": [
+        [
+          {
+            "node": "Split URLs1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Page (raw)": {
+      "main": [
+        [
+          {
+            "node": "IF Head Unsupported",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Page (SPA)": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split URLs": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Render Page (SPA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Split URLs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Join URL + Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split URLs1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Fetch Page (raw)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Split URLs1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Join URL + Response",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "IF Head Unsupported": {
+      "main": [
+        [
+          {
+            "node": "Raw Get Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Raw Clean",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Raw Clean": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Raw Get Fallback": {
+      "main": [
+        [
+          {
+            "node": "Raw Clean",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Page Context": {
+      "main": [
+        [
+          {
+            "node": "Set for Metadata Review Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Join URL + Response": {
+      "main": [
+        [
+          {
+            "node": "Build Page Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Metadata Review Agent": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set for Metadata Review Agent": {
+      "main": [
+        [
+          {
+            "node": "Metadata Review Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Metadata Review Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Report Writer - Metadata",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Writer - Metadata": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Send email1",
             "type": "main",
             "index": 0
           }
@@ -156,17 +1173,10 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "1.0.0",
+  "versionId": "84208eb9-175f-44d9-9392-a51c761bd4d9",
   "meta": {
-    "templateCredsSetupCompleted": true
+    "instanceId": "4dd9ef9c32b4c5c978d1872da1532fc15b09739127c117a29f6b4689b963430b"
   },
-  "id": "seo-metadata-review-workflow",
-  "tags": [
-    {
-      "createdAt": "2025-08-28T08:14:15.000Z",
-      "updatedAt": "2025-08-28T08:14:15.000Z",
-      "id": "seo-analysis",
-      "name": "SEO Analysis"
-    }
-  ]
+  "id": "kNBoh6bzML9vdxut",
+  "tags": []
 }
