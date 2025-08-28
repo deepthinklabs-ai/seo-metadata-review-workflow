@@ -1,4 +1,4 @@
-# SEO - Metadata Review Workflow
+# SEO - Metadata Review Workflow - n8n
 
 An n8n workflow for automated SEO metadata review and analysis.
 
