@@ -1,0 +1,172 @@
+{
+  "name": "SEO - Metadata Review",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "seo-metadata-review",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "seo-metadata-review-webhook"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "fetch-webpage",
+      "name": "Fetch Webpage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "data",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "title",
+              "cssSelector": "title",
+              "returnValue": "text"
+            },
+            {
+              "key": "description",
+              "cssSelector": "meta[name='description']",
+              "returnValue": "attribute",
+              "attribute": "content"
+            },
+            {
+              "key": "ogTitle",
+              "cssSelector": "meta[property='og:title']",
+              "returnValue": "attribute",
+              "attribute": "content"
+            },
+            {
+              "key": "ogDescription",
+              "cssSelector": "meta[property='og:description']",
+              "returnValue": "attribute",
+              "attribute": "content"
+            }
+          ]
+        }
+      },
+      "id": "extract-metadata",
+      "name": "Extract Metadata",
+      "type": "n8n-nodes-base.htmlExtract",
+      "typeVersion": 1.2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// SEO Analysis Logic\nconst url = $input.first()?.json?.url || '';\nconst metadata = $input.first()?.json || {};\n\n// Title Analysis\nconst title = metadata.title || '';\nconst titleLength = title.length;\nconst titleRecommendations = [];\n\nif (titleLength === 0) {\n  titleRecommendations.push('Missing title tag');\n} else if (titleLength < 30) {\n  titleRecommendations.push('Title too short (recommended: 30-60 characters)');\n} else if (titleLength > 60) {\n  titleRecommendations.push('Title too long (recommended: 30-60 characters)');\n}\n\n// Description Analysis\nconst description = metadata.description || '';\nconst descriptionLength = description.length;\nconst descriptionRecommendations = [];\n\nif (descriptionLength === 0) {\n  descriptionRecommendations.push('Missing meta description');\n} else if (descriptionLength < 120) {\n  descriptionRecommendations.push('Description too short (recommended: 120-160 characters)');\n} else if (descriptionLength > 160) {\n  descriptionRecommendations.push('Description too long (recommended: 120-160 characters)');\n}\n\n// Open Graph Analysis\nconst ogRecommendations = [];\nif (!metadata.ogTitle) {\n  ogRecommendations.push('Missing Open Graph title');\n}\nif (!metadata.ogDescription) {\n  ogRecommendations.push('Missing Open Graph description');\n}\n\n// Overall Score Calculation\nlet score = 100;\nscore -= titleRecommendations.length * 20;\nscore -= descriptionRecommendations.length * 15;\nscore -= ogRecommendations.length * 10;\n\nconst analysis = {\n  url: url,\n  metadata: metadata,\n  analysis: {\n    title: {\n      length: titleLength,\n      recommendations: titleRecommendations\n    },\n    description: {\n      length: descriptionLength,\n      recommendations: descriptionRecommendations\n    },\n    openGraph: {\n      recommendations: ogRecommendations\n    },\n    overallScore: Math.max(0, score),\n    timestamp: new Date().toISOString()\n  }\n};\n\nreturn [analysis];"
+      },
+      "id": "analyze-seo",
+      "name": "Analyze SEO",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Webpage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Webpage": {
+      "main": [
+        [
+          {
+            "node": "Extract Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Metadata": {
+      "main": [
+        [
+          {
+            "node": "Analyze SEO",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze SEO": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "seo-metadata-review-workflow",
+  "tags": [
+    {
+      "createdAt": "2025-08-28T08:14:15.000Z",
+      "updatedAt": "2025-08-28T08:14:15.000Z",
+      "id": "seo-analysis",
+      "name": "SEO Analysis"
+    }
+  ]
+}
