@@ -201,10 +201,11 @@ This workflow is available under the MIT License. See LICENSE file for details.
 
 ## Support
 
+Please feel free to email me with any issues, questions, comments, enhancement requests, etc. Happy to help!
+
 - 📧 Email: [dave@deepthinklabs.ai]
 - 🐛 Issues: [GitHub Issues](https://github.com/deepthinklabs-ai/seo-metadata-review-workflow/issues)
 - 📖 Documentation: [n8n Documentation](https://docs.n8n.io/)
-- 📋 Detailed Setup: [Configuration Guide](docs/CONFIGURATION.md)
 
 ## Changelog
 
